@@ -1,11 +1,12 @@
 {
-  "name": "promise-gate-timeslice-demo",
+  "name": "rendering-timeslicer-lab",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
+    "type-check": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -13,7 +14,11 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "^7.0.2",
     "vite": "^5.0.0"
   }
 }

@@ -1,43 +1,87 @@
-# ⚡ Long Task & Rendering Chunking Testing Lab
-
-이 레포지토리는 브라우저의 메인 스레드를 차단하는 **롱태스크(Long Task)** 현상을 방지하기 위해, 대규모 데이터 및 무거운 UI 렌더링을 여러 청크(Chunk)로 분할하는 다양한 **렌더링 분할 기술을 테스트하고 성능을 비교**하는 실험실입니다.
-
-## 🚀 프로젝트 목적
-
-- **롱태스크 탐지**: 50ms 이상 메인 스레드를 점유하는 CPU 집약적 렌더링 작업 확인
-- **UX 개선**: 화면 얼어붙음(Freeze) 현상을 해결하여 INP(Interaction to Next Paint) 및 TBT(Total Blocking Time) 지표 개선
-- **기법별 비교**: 동기식 렌더링과 다양한 비동기 분할 렌더링 기법의 성능 측정 및 분석
+# ⚡ Long Task & Rendering Chunking Testing Lab (TypeScript)
+# ⚡ 롱태스크 및 렌더링 청킹 성능 실험실 (TypeScript)
 
 ---
 
-## 🛠️ 테스트 및 비교 기술
+## 🚀 Project Purpose / 프로젝트 목적
 
-대량의 DOM 노드(예: 10,000개 이상의 리스트 아이템)를 생성할 때 아래 기법들을 적용하여 비교합니다.
+**English**  
+This repository is a benchmark lab designed to prevent browser **Long Tasks** (> 50ms main thread blocking) during heavy data processing. It breaks heavy computation into asynchronous time-slices to preserve UI responsiveness, high FPS, and improve Core Web Vitals such as **INP** (Interaction to Next Paint) and **TBT** (Total Blocking Time).
 
-1. **Synchronous Rendering (Baseline)**
-   - 분할 없이 한 번에 모든 데이터를 렌더링하여 의도적으로 롱태스크를 유발합니다.
-2. **`setTimeout` / `setInterval`**
-   - 매크로태스크 큐(Macrotask Queue)를 이용해 브라우저에게 렌더링 양보(Yielding)를 수행합니다.
-3. **`requestAnimationFrame` (rAF)**
-   - 브라우저의 프레임 업데이트 주기(60Hz 기준 약 16.7ms)에 맞춰 렌더링을 최적화하여 분할합니다.
-4. **`requestIdleCallback` (rIC)**
-   - 브라우저가 남는 유휴 시간(Idle Time)을 활용해 메인 스레드 부하를 최소화하며 렌더링합니다.
-5. **`scheduler.yield()` (Modern Web API)**
-   - 최신 스케줄러 API를 활용해 우선순위를 유지하면서도 효율적으로 메인 스레드 제어권을 양보합니다.
+**한국어**  
+이 레포지토리는 대규모 데이터 가공 중 발생하는 브라우저 **롱태스크(Long Task)**(50ms 이상 메인 스레드 점유) 현상을 방지하기 위한 성능 비교 실험실입니다. 무거운 연산을 비동기 타임슬라이스(Time-slice)로 분할하여 UI 반응성 및 고프레임을 유지하고 **INP** 및 **TBT** 지표를 개선합니다.
 
 ---
 
-## 📊 성능 측정 지표 (Performance Metrics)
+## 📚 Documentation / 상세 문서
 
-크롬 개발자 도구(Lighthouse / Performance 탭) 및 `PerformanceObserver` API를 활용하여 다음 지표를 기록합니다.
-
-- **Long Task Count**: 실행 시간 50ms를 초과한 태스크의 총 개수
-- **Total Blocking Time (TBT)**: 메인 스레드가 차단된 총 시간
-- **FPS (Frames Per Second)**: 렌더링 중 화면의 부드러움 정도 (프레임 드롭 여부)
-- **Script Execution Time**: 순수 스크립트 실행 및 DOM 반영 완료까지 걸린 시간
+**English & 한국어**  
+- 📐 [doc/architecture.md](file:///c:/myLec/rendering_timeslicer/doc/architecture.md): Technical architecture, `yieldNow()` implementation details, and module design. / 타임슬라이싱 시스템 설계, `yieldNow()` 유틸리티 구현 상세 및 모듈 구조
+- 🧪 [doc/benchmark-guide.md](file:///c:/myLec/rendering_timeslicer/doc/benchmark-guide.md): 4 benchmark mode comparison and Chrome DevTools profiling guide. / 4가지 테스트 모드 비교 및 크롬 개발자 도구 성능 측정 가이드
 
 ---
 
-## 📁 프로젝트 구조
+## 🛠️ Benchmark Strategies in Code / 소스코드 기반 4가지 테스트 전략
+
+**English**  
+Based on [RowDataViewModel.ts](file:///c:/myLec/rendering_timeslicer/src/viewmodels/RowDataViewModel.ts), tests process `10,000,000` items (`WORK_SIZE`) under 4 strategy modes:
+1. **`BLOCKING` (동기)**: Pure synchronous `for` loop with no yielding. Causes full main thread freeze (`RenderTickMonitor` halts).
+2. **`EVERY` (매 루프 양보)**: Calls `yieldNow()` on every iteration. 100% UI safety, but highest context switching overhead.
+3. **`TIME` (시간 예산 - 10ms)**: Calls `yieldNow()` when execution time exceeds `timeBudgetMs` (default `10ms`). Adaptive & standard recommendation.
+4. **`PERCENT` (청크 분할 - 8%)**: Calls `yieldNow()` every `percentChunk` interval (default `8%` = every `800,000` items). Lowest yielding overhead with maximum processing throughput.
+
+**한국어**  
+[RowDataViewModel.ts](file:///c:/myLec/rendering_timeslicer/src/viewmodels/RowDataViewModel.ts) 구현을 기반으로 `10,000,000`건(`WORK_SIZE`)의 데이터를 아래 4가지 모드로 처리합니다:
+1. **`BLOCKING` (동기)**: 양보 없이 순수 동기 `for` 루프 실행. 메인 스레드가 완전히 멈춤 (`RenderTickMonitor` 카운터 정지).
+2. **`EVERY` (매 루프 양보)**: 매 루프마다 `yieldNow()` 호출. UI는 완벽히 안전하나 컨텍스트 스위칭 오버헤드가 가장 큼.
+3. **`TIME` (시간 예산 - 10ms)**: 연산 시간이 `timeBudgetMs`(기본 `10ms`)를 초과할 때 `yieldNow()` 호출. 기기 맞춤형 표준 권장 방식.
+4. **`PERCENT` (청크 분할 - 8%)**: `percentChunk`(기본 `8%` = `800,000`건 마다) 구간별로 `yieldNow()` 호출. 최소한의 양보 횟수로 최고의 연산 속도 기록.
 
 ---
+
+## 📁 Source Code Directory Structure / 소스코드 디렉토리 구조
+
+```text
+rendering_timeslicer/
+├── doc/
+│   ├── architecture.md         # Technical Architecture & Code Specification (한영 병기)
+│   └── benchmark-guide.md      # Performance Profiling & Benchmark Guide (한영 병기)
+├── index.html                  # HTML Entry point -> /src/main.tsx
+├── package.json                # Dependencies, type-check & build scripts
+├── tsconfig.json               # TypeScript Compiler Configuration
+├── tsconfig.node.json          # Vite Node Configuration
+├── vite.config.ts              # Vite Config with @vitejs/plugin-react
+└── src/
+    ├── main.tsx                # Entrypoint rendering <App /> in StrictMode
+    ├── App.tsx                 # Root component rendering <PerformanceLab />
+    ├── types/
+    │   └── timeslicer.ts       # TestMode, ModeResult, RowItem, ModernScheduler interfaces
+    ├── utils/
+    │   ├── yield.ts            # yieldNow() with scheduler.yield / MessageChannel / setTimeout
+    │   ├── timeSlicer.ts       # createTimeSlicer(budgetInMs) utility
+    │   └── promiseGate.ts      # createPromiseGate() utility
+    ├── viewmodels/
+    │   └── RowDataViewModel.ts # Data generator & time-slicing prepare() method
+    └── components/
+        ├── RenderTickMonitor.tsx # RAF-based tick counter showing live main-thread status
+        ├── ModeCard.tsx          # Reusable UI card displaying title, progress & duration
+        └── PerformanceLab.tsx    # Dashboard UI orchestrating 4-mode benchmark tests
+```
+
+---
+
+## 💻 How to Run / 실행 방법
+
+```bash
+# Install dependencies / 의존성 설치
+pnpm install # or npm install
+
+# Start development server / 개발 서버 실행
+pnpm dev # or npm run dev
+
+# Run TypeScript type checking / 타입 검사
+pnpm run type-check # or npm run type-check
+
+# Build production bundle / 프로덕션 빌드
+pnpm build # or npm run build
+```

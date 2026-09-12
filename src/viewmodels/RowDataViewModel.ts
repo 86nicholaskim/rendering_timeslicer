@@ -1,17 +1,22 @@
 import { TestMode, RowItem, PrepareResult } from '../types/timeslicer';
 import { yieldNow } from '../utils/yield';
 
+/**
+ * [대용량 데이터 생성 및 타임슬라이싱 벤치마크 뷰모델]
+ * 1,000만 건 이상의 대용량 데이터를 가공할 때 
+ * 4가지 처리 모드(동기/매루프/시간예산/청크비율)별 성능을 측정합니다.
+ */
 export class RowDataViewModel {
   public rows: RowItem[] = [];
   public onProgress: ((progress: number) => void) | null = null;
 
   /**
-   * Prepares heavy row data using the specified time-slicing mode.
+   * 대용량 행 데이터를 생성하면서 지정된 전략에 따라 메인 스레드에 제어권을 양보합니다.
    *
-   * @param totalSize Total number of rows to generate (e.g. 10,000,000)
-   * @param mode Strategy mode ('BLOCKING' | 'EVERY' | 'TIME' | 'PERCENT')
-   * @param timeBudgetMs Time budget in milliseconds for TIME mode (default 10ms)
-   * @param percentChunk Chunk ratio for PERCENT mode (default 0.08 / 8%)
+   * @param totalSize 생성할 총 데이터 개수 (예: 10,000,000 건)
+   * @param mode 양보 전략 모드 ('BLOCKING' | 'EVERY' | 'TIME' | 'PERCENT')
+   * @param timeBudgetMs TIME 모드의 시간 예산 (기본값: 10ms)
+   * @param percentChunk PERCENT 모드의 청크 비율 (기본값: 0.08 / 8%)
    */
   async prepare(
     totalSize: number,
@@ -33,22 +38,22 @@ export class RowDataViewModel {
       });
 
       if (mode === 'BLOCKING') {
-        // ❌ Synchronous: No yield to main thread. Completely blocks UI render and ticks.
+        // ❌ 동기 모드: 제어권 양보 없음. 메인 스레드를 점유하여 UI 프리징 유발.
       } else if (mode === 'EVERY') {
-        // ❌ Yields on every single loop iteration. Extremely safe UI but high overhead.
+        // ❌ 매 루프 양보: 매 턴마다 yield. UI는 반응하나 잦은 스위칭으로 처리 속도 큼.
         await yieldNow();
         if (i % 100_000 === 0) {
           this.updateProgress(i, totalSize);
         }
       } else if (mode === 'TIME') {
-        // ✅ Yields when execution time exceeds the budget (e.g., 10ms).
+        // ✅ 시간 예산 모드: 일정 시간(예: 10ms)이 지날 때마다 양보하여 스레드 쾌적도 유지.
         if (performance.now() - lastYieldTime > timeBudgetMs) {
           await yieldNow();
           lastYieldTime = performance.now();
           this.updateProgress(i, totalSize);
         }
       } else if (mode === 'PERCENT') {
-        // ✅ Yields at predefined percentage intervals (e.g. every 8% chunk).
+        // ✅ 청크 비율 모드: 전체 연산량의 일정 비율(예: 8%)마다 양보. 연산 속도가 우수함.
         if (i > 0 && i % chunk8Percent === 0) {
           await yieldNow();
           this.updateProgress(i, totalSize);

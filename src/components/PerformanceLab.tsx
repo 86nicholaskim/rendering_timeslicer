@@ -3,10 +3,13 @@ import { BenchmarkResults, TestMode } from '../types/timeslicer';
 import { RowDataViewModel } from '../viewmodels/RowDataViewModel';
 import { RenderTickMonitor } from './RenderTickMonitor';
 import { ModeCard } from './ModeCard';
+import { TimeslicerConfigProvider, useTimeslicerConfig } from '../context/TimeslicerConfigContext';
+import { ConfigControlPanel } from './ConfigControlPanel';
 
 const WORK_SIZE = 10_000_000; // 1,000만 건 데이터 연산 기준
 
-export const PerformanceLab: React.FC = () => {
+const PerformanceLabContent: React.FC = () => {
+  const { config } = useTimeslicerConfig();
   const [results, setResults] = useState<BenchmarkResults>({
     BLOCKING: { progress: 0, time: 0, isRunning: false },
     EVERY: { progress: 0, time: 0, isRunning: false },
@@ -29,7 +32,13 @@ export const PerformanceLab: React.FC = () => {
       }));
     };
 
-    const { time } = await viewModel.prepare(WORK_SIZE, mode);
+    // Config Context의 timeBudgetMs와 percentChunk를 반영하여 실행
+    const { time } = await viewModel.prepare(
+      WORK_SIZE,
+      mode,
+      config.timeBudgetMs,
+      config.percentChunk
+    );
 
     setResults((prev) => ({
       ...prev,
@@ -39,7 +48,7 @@ export const PerformanceLab: React.FC = () => {
 
   return (
     <div style={containerStyle}>
-      <header style={{ textAlign: 'center', marginBottom: '30px' }}>
+      <header style={{ textAlign: 'center', marginBottom: '25px' }}>
         <h1 style={{ fontSize: '28px', marginBottom: '15px', color: '#111' }}>
           ⚡ Long Task & Timesliced Rendering Lab
         </h1>
@@ -48,9 +57,12 @@ export const PerformanceLab: React.FC = () => {
           ⚠️ BLOCKING 모드 실행 시 실시간 틱과 브라우저 UI가 완전히 멈춥니다!
         </p>
         <p style={{ color: '#666', fontSize: '14px' }}>
-          데이터 {WORK_SIZE.toLocaleString()} 건 생성 및 타임슬라이싱 성능 비교
+          데이터 {WORK_SIZE.toLocaleString()} 건 생성 및 동적 예산 타임슬라이싱 성능 비교
         </p>
       </header>
+
+      {/* 동적 예산(BudgetPreset) 제어 컨트롤러 */}
+      <ConfigControlPanel />
 
       <div style={gridStyle}>
         <ModeCard
@@ -68,21 +80,29 @@ export const PerformanceLab: React.FC = () => {
           color="#ff4444"
         />
         <ModeCard
-          title="시간 예산 (Time - 10ms)"
-          desc="10ms 시간 예산 초과 시 양보. 기기 성능 맞춤형 표준 방식."
+          title={`시간 예산 (Time - ${config.timeBudgetMs}ms)`}
+          desc={`설정된 ${config.timeBudgetMs}ms 예산 초과 시 양보. 기기 사양 맞춤형 유연 방식.`}
           result={results.TIME}
           onRun={() => runTest('TIME')}
           color="#ffbb33"
         />
         <ModeCard
-          title="청크 분할 (Percent - 8%)"
-          desc="8% 구간 분할 양보. 최소한의 쿨타임 양보로 높은 연산 속도 기록."
+          title={`청크 분할 (Percent - ${Math.round(config.percentChunk * 100)}%)`}
+          desc={`${Math.round(config.percentChunk * 100)}% 구간 분할 양보. 최소한의 쿨타임 양보로 높은 연산 속도 기록.`}
           result={results.PERCENT}
           onRun={() => runTest('PERCENT')}
           color="#00C851"
         />
       </div>
     </div>
+  );
+};
+
+export const PerformanceLab: React.FC = () => {
+  return (
+    <TimeslicerConfigProvider>
+      <PerformanceLabContent />
+    </TimeslicerConfigProvider>
   );
 };
 
